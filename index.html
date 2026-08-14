@@ -498,6 +498,18 @@
         </div>
     </div>
 
+    <!-- Toast Notification Banner (Replaces Browser Alerts) -->
+    <div id="toastNotice" class="fixed top-20 right-4 z-50 hidden max-w-sm glass-panel border border-amber-500/40 text-amber-200 px-4 py-3 rounded-2xl shadow-2xl flex items-start gap-3 transition-all">
+        <i class="fa-solid fa-triangle-exclamation text-amber-400 text-lg shrink-0 mt-0.5"></i>
+        <div class="flex-1">
+            <h4 class="text-xs font-bold text-amber-300 uppercase tracking-wider mb-0.5">Live Search Notice</h4>
+            <p id="toastText" class="text-xs text-slate-300 leading-snug"></p>
+        </div>
+        <button onclick="document.getElementById('toastNotice').classList.add('hidden')" class="text-slate-400 hover:text-white">
+            <i class="fa-solid fa-xmark text-xs"></i>
+        </button>
+    </div>
+
     <!-- Application Footer -->
     <footer class="py-2 px-4 md:px-6 bg-slate-950/95 border-t border-slate-800/80 text-xs text-slate-400 flex flex-col sm:flex-row items-center justify-between gap-1.5 shrink-0 z-30 select-none">
         <div class="flex items-center space-x-2">
@@ -684,16 +696,16 @@
         const journalList = document.getElementById('journalList');
         const journalTotalStats = document.getElementById('journalTotalStats');
         const clearJournalBtn = document.getElementById('clearJournalBtn');
-        const settingsModal = document.getElementById('settingsModal');
-        const openSettingsBtn = document.getElementById('openSettingsBtn');
-        const closeSettingsBtn = document.getElementById('closeSettingsBtn');
-        const saveSettingsBtn = document.getElementById('saveSettingsBtn');
-        const customApiKeyInput = document.getElementById('customApiKey');
-        const toggleAudioFx = document.getElementById('toggleAudioFx');
-        const audioFxIcon = document.getElementById('audioFxIcon');
-        const speakResultBtn = document.getElementById('speakResultBtn');
-        const saveToJournalBtn = document.getElementById('saveToJournalBtn');
-        const studentNotesInput = document.getElementById('studentNotesInput');
+        // Toast Notification Display Helper
+        function showToastNotice(msg) {
+            const toast = document.getElementById('toastNotice');
+            const toastText = document.getElementById('toastText');
+            if (toast && toastText) {
+                toastText.textContent = msg;
+                toast.classList.remove('hidden');
+                setTimeout(() => toast.classList.add('hidden'), 6000);
+            }
+        }
 
         // Web Audio FX Generator
         function playSoundFx(type) {
@@ -822,7 +834,7 @@
                     await new Promise(r => setTimeout(r, 400));
                     displayResults(presetOverride);
                 } else if (base64Image) {
-                    document.getElementById('loadingStatusText').textContent = 'Connecting live to Google Search & Gemini Vision AI...';
+                    document.getElementById('loadingStatusText').textContent = 'Connecting live to AI Vision Engine...';
                     const apiData = await callGeminiVisionApi(base64Image);
                     displayResults(apiData);
                 } else {
@@ -830,7 +842,8 @@
                 }
             } catch (error) {
                 console.error("Live Analysis Error:", error);
-                alert(`Live Search Notice: ${error.message || "Failed to analyze image live."}\nShowing sample specimen.`);
+                
+                showToastNotice(`${error.message || "Failed to analyze image live."} Showing sample specimen.`);
                 
                 const fallback = PRESET_DATABASE[Math.floor(Math.random() * PRESET_DATABASE.length)];
                 displayResults({
@@ -843,37 +856,28 @@
             }
         }
 
-        // Call Gemini 3 Flash preview with Google Search Grounding for REAL-TIME Google Lens identification
+        // Call Gemini Vision AI for REAL-TIME Google Lens identification
         async function callGeminiVisionApi(base64Image) {
-            const userCustomKey = localStorage.getItem('biolens_gemini_key');
-            const apiKey = userCustomKey ? userCustomKey.trim() : "";
+            // Using gemini-3-flash-preview which allows the Canvas environment to auto-inject the authentication key
+            const apiKey = "";
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
-            
-            const promptText = `Act as Google Lens for primary and middle school science students. 
-Analyze this real-time photo and use Google Search grounding to identify the exact plant, flower, leaf, fungus, or animal species shown. 
-Perform a live web lookup to verify the taxonomy and species details.
 
-Return ONLY a valid JSON object without markdown formatting, using this exact schema:
+            const promptText = `Act as Google Lens for primary and middle school science students. 
+Analyze this real-time photo and identify the exact plant, flower, leaf, fungus, or animal species shown. 
+You MUST respond with ONLY a valid JSON object matching this exact structure, with no markdown formatting or backticks. Do not include any other text:
 {
-  "commonName": "string",
-  "scientificName": "string",
-  "category": "Plant/Animal/Insect/Fungus/Bird/etc.",
-  "confidenceScore": number (1-100),
-  "closestMatches": [{"name": "string", "similarity": number}],
-  "summary": "string",
-  "keyCharacteristics": ["string"],
-  "taxonomy": {
-    "kingdom": "string",
-    "phylum": "string",
-    "class": "string",
-    "family": "string",
-    "genus": "string",
-    "species": "string"
-  },
-  "habitatAndRange": "string",
-  "dietOrNutrition": "string",
-  "funFacts": ["string"],
-  "educationalPrompt": "string"
+    "commonName": "Common Name",
+    "scientificName": "Scientific Name",
+    "category": "Plant/Animal/Fungus",
+    "confidenceScore": 95,
+    "closestMatches": [{"name": "Match 1", "similarity": 95}, {"name": "Match 2", "similarity": 80}],
+    "summary": "Brief description.",
+    "keyCharacteristics": ["Trait 1", "Trait 2"],
+    "taxonomy": {"kingdom": "K", "phylum": "P", "class": "C", "family": "F", "genus": "G", "species": "S"},
+    "habitatAndRange": "Habitat details",
+    "dietOrNutrition": "Diet details",
+    "funFacts": ["Fact 1", "Fact 2"],
+    "educationalPrompt": "Question for students?"
 }`;
 
             const payload = {
@@ -883,9 +887,7 @@ Return ONLY a valid JSON object without markdown formatting, using this exact sc
                         { text: promptText },
                         { inlineData: { mimeType: "image/jpeg", data: base64Image } }
                     ]
-                }],
-                // Enable Google Search grounding for real-time live web search verification
-                tools: [{ "google_search": {} }]
+                }]
             };
 
             let response;
@@ -912,36 +914,13 @@ Return ONLY a valid JSON object without markdown formatting, using this exact sc
 
             const data = await response.json();
             const candidate = data.candidates?.[0];
-            const text = candidate?.content?.parts?.[0]?.text;
+            let text = candidate?.content?.parts?.[0]?.text;
             
             if (!text) throw new Error("No identification text returned from live vision engine");
 
-            // Clean & extract JSON from response (handles potential markdown or text wrappers)
-            let jsonString = text;
-            const markdownMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-            if (markdownMatch) {
-                jsonString = markdownMatch[1];
-            } else {
-                const start = text.indexOf('{');
-                const end = text.lastIndexOf('}');
-                if (start !== -1 && end !== -1) {
-                    jsonString = text.substring(start, end + 1);
-                }
-            }
-
-            const parsedResult = JSON.parse(jsonString);
-
-            // Extract Google Search grounding sources if available
-            let sources = [];
-            if (candidate.groundingMetadata && candidate.groundingMetadata.groundingAttributions) {
-                sources = candidate.groundingMetadata.groundingAttributions
-                    .map(attr => ({
-                        uri: attr.web?.uri,
-                        title: attr.web?.title
-                    }))
-                    .filter(s => s.uri && s.title);
-            }
-            parsedResult.groundingSources = sources;
+            // Clean up any markdown formatting the AI might add despite instructions
+            text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+            const parsedResult = JSON.parse(text);
 
             return parsedResult;
         }
@@ -1167,14 +1146,16 @@ Return ONLY a valid JSON object without markdown formatting, using this exact sc
             });
 
             // Settings Modal Listeners
-            openSettingsBtn.addEventListener('click', () => {
-                customApiKeyInput.value = localStorage.getItem('biolens_gemini_key') || '';
+            const settingsModal = document.getElementById('settingsModal');
+            document.getElementById('openSettingsBtn').addEventListener('click', () => {
+                document.getElementById('customApiKey').value = localStorage.getItem('biolens_gemini_key') || '';
                 settingsModal.classList.remove('hidden');
             });
-            closeSettingsBtn.addEventListener('click', () => settingsModal.classList.add('hidden'));
-            saveSettingsBtn.addEventListener('click', () => {
-                localStorage.setItem('biolens_gemini_key', customApiKeyInput.value.trim());
+            document.getElementById('closeSettingsBtn').addEventListener('click', () => settingsModal.classList.add('hidden'));
+            document.getElementById('saveSettingsBtn').addEventListener('click', () => {
+                localStorage.setItem('biolens_gemini_key', document.getElementById('customApiKey').value.trim());
                 settingsModal.classList.add('hidden');
+                showToastNotice("API Key saved! You can now use the live camera.");
             });
 
             // Audio Controls
