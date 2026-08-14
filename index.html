@@ -56,6 +56,458 @@
             </div>
         </div>
         <div class="flex gap-3">
+            <button class="bg-slate-800 hover:bg-slate-700 p-2.5 rounded-full transition" onclick="openSettings()" title="Settings & API Key">
+                <i data-lucide="sliders" class="text-slate-300 w-5 h-5"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="flex-1 flex flex-col md:flex-row p-4 gap-4 overflow-hidden relative">
+        
+        <!-- Left Panel: Viewfinder -->
+        <section class="flex-1 flex flex-col gap-3 min-h-[40vh] md:min-h-0">
+            <!-- Camera Container -->
+            <div id="cameraContainer" class="flex-1 glass-panel rounded-2xl relative overflow-hidden flex flex-col bg-black items-center justify-center">
+                <video id="webcam" class="absolute inset-0 w-full h-full object-cover" autoplay playsinline></video>
+                <img id="uploadPreview" class="absolute inset-0 w-full h-full object-contain hidden bg-black/90" />
+                
+                <div class="hud-corners"></div>
+                <div class="scanner-line"></div>
+                
+                <!-- Status Overlay -->
+                <div id="statusBadge" class="absolute top-4 left-4 glass-panel bg-black/50 px-3 py-1.5 rounded-full flex items-center gap-2 text-sm text-emerald-400 border-emerald-500/30">
+                    <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                    <span id="statusText">Camera Active</span>
+                </div>
+            </div>
+
+            <!-- PRIMARY CAPTURE BUTTON -->
+            <button id="captureBtn" class="w-full bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-3 transition shadow-lg shadow-emerald-900/30">
+                <i data-lucide="aperture" class="w-7 h-7"></i>
+                <span class="text-xl">Scan Specimen</span>
+            </button>
+
+            <!-- Secondary Controls -->
+            <div class="flex gap-3">
+                <button id="toggleCameraBtn" class="flex-1 glass-panel hover:bg-slate-800 text-slate-200 font-medium py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition">
+                    <i data-lucide="switch-camera" class="w-5 h-5"></i> Flip
+                </button>
+                <label class="flex-1 glass-panel hover:bg-slate-800 text-slate-200 font-medium py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition cursor-pointer">
+                    <i data-lucide="upload" class="w-5 h-5"></i> Upload
+                    <input type="file" id="uploadInput" accept="image/*" class="hidden">
+                </label>
+                <button id="clearUploadBtn" class="hidden glass-panel hover:bg-red-900/30 text-red-400 font-medium py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </section>
+
+        <!-- Right Panel: Data -->
+        <section class="w-full md:w-[45%] glass-panel rounded-2xl flex flex-col overflow-hidden">
+            
+            <div id="loadingOverlay" class="hidden absolute inset-0 bg-slate-900/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center text-emerald-400">
+                <i data-lucide="loader-2" class="w-12 h-12 animate-spin mb-4"></i>
+                <p class="font-medium animate-pulse text-lg">Google Lens Engine Analyzing...</p>
+                <p class="text-sm text-slate-400 mt-2">Checking visual matches & taxonomy</p>
+            </div>
+
+            <div id="emptyState" class="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400">
+                <i data-lucide="focus" class="w-16 h-16 mb-4 opacity-50"></i>
+                <h3 class="text-xl font-medium text-slate-300 mb-2">Ready to Identify</h3>
+                <p class="max-w-xs text-sm line-height-loose">Point your camera at any plant, animal, or insect and tap "Scan Specimen" to analyze it.</p>
+            </div>
+
+            <div id="resultsContainer" class="hidden flex-1 overflow-y-auto p-5">
+                <!-- Match header -->
+                <div class="flex justify-between items-start mb-6">
+                    <div>
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="bg-emerald-500/20 text-emerald-400 text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">Top Match</span>
+                            <span id="confidenceBadge" class="bg-blue-500/20 text-blue-400 text-xs font-bold px-2 py-1 rounded">--% Confidence</span>
+                        </div>
+                        <h2 id="speciesName" class="text-3xl font-bold text-white mt-2">--</h2>
+                        <p id="scientificName" class="text-emerald-400 italic text-lg">--</p>
+                    </div>
+                    <button id="speakBtn" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-full transition text-white">
+                        <i data-lucide="volume-2" class="w-6 h-6"></i>
+                    </button>
+                </div>
+
+                <!-- Tabs -->
+                <div class="flex border-b border-slate-700 mb-5">
+                    <button class="px-4 py-2 text-emerald-400 border-b-2 border-emerald-400 font-medium">Characteristics</button>
+                </div>
+
+                <!-- Content -->
+                <div class="space-y-6">
+                    <!-- Key Traits -->
+                    <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                        <h4 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+                            <i data-lucide="microscope" class="w-4 h-4"></i> Anatomical Traits
+                        </h4>
+                        <p id="traitsText" class="text-slate-300 text-sm leading-relaxed">--</p>
+                    </div>
+
+                    <!-- Habitat & Facts -->
+                    <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                        <h4 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+                            <i data-lucide="globe-2" class="w-4 h-4"></i> Ecosystem & Facts
+                        </h4>
+                        <p id="factsText" class="text-slate-300 text-sm leading-relaxed">--</p>
+                    </div>
+
+                    <!-- Taxonomy Tree -->
+                    <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                        <h4 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+                            <i data-lucide="git-merge" class="w-4 h-4"></i> Classification
+                        </h4>
+                        <div class="grid grid-cols-2 gap-y-3 text-sm">
+                            <div><span class="text-slate-500 block text-xs">Kingdom</span><span id="taxKingdom" class="text-slate-200">--</span></div>
+                            <div><span class="text-slate-500 block text-xs">Phylum</span><span id="taxPhylum" class="text-slate-200">--</span></div>
+                            <div><span class="text-slate-500 block text-xs">Class</span><span id="taxClass" class="text-slate-200">--</span></div>
+                            <div><span class="text-slate-500 block text-xs">Family</span><span id="taxFamily" class="text-slate-200">--</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Hidden Canvas for Image Processing -->
+        <canvas id="captureCanvas" class="hidden"></canvas>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-900 border-t border-slate-800 p-3 text-center z-20">
+        <p class="text-xs text-slate-400">
+            <strong class="text-slate-300">Frontier Primary School</strong> | 
+            Designed and developed by Ganges Lim | 
+            Version: 14 Aug 2026
+        </p>
+    </footer>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden opacity-0 transition-opacity">
+        <div class="glass-panel bg-slate-800 p-6 rounded-2xl max-w-md w-[90%] border border-slate-600 shadow-2xl transition-transform transform scale-95" id="settingsModalContent">
+            <div class="flex items-center gap-3 mb-4 text-emerald-400">
+                <i data-lucide="settings" class="w-6 h-6"></i>
+                <h3 class="text-xl font-bold text-white">App Settings</h3>
+            </div>
+            <p class="text-sm text-slate-400 mb-4">If using the downloaded iPad version, provide your free Gemini API Key below.</p>
+            <label class="block text-sm text-slate-300 mb-2 font-medium">Gemini API Key</label>
+            <input type="password" id="apiKeyInput" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white mb-6 focus:border-emerald-500 focus:outline-none" placeholder="AIzaSy...">
+            <div class="flex justify-end gap-3">
+                <button onclick="closeSettings()" class="px-4 py-2 text-slate-300 hover:text-white transition">Cancel</button>
+                <button onclick="saveSettings()" class="bg-emerald-600 hover:bg-emerald-500 px-6 py-2 rounded-xl text-white font-medium transition">Save Key</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Message Modal -->
+    <div id="messageModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden opacity-0 transition-opacity">
+        <div class="glass-panel bg-slate-800 p-6 rounded-2xl max-w-md w-[90%] border border-slate-600 shadow-2xl transform scale-95 transition-transform" id="messageModalContent">
+            <div class="flex items-center gap-3 mb-4 text-emerald-400">
+                <i data-lucide="info" class="w-6 h-6"></i>
+                <h3 class="text-xl font-bold" id="messageTitle">Notice</h3>
+            </div>
+            <p class="text-slate-300 mb-6" id="messageBody">Message text goes here.</p>
+            <div class="flex justify-end">
+                <button onclick="closeMessage()" class="bg-emerald-600 hover:bg-emerald-500 px-6 py-2 rounded-xl text-white font-medium transition">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Core Environment Variable ---
+        const apiKey = ""; // Canvas auto-injects here if previewed online
+
+        // --- DOM Elements ---
+        const video = document.getElementById('webcam');
+        const uploadPreview = document.getElementById('uploadPreview');
+        const captureCanvas = document.getElementById('captureCanvas');
+        const captureBtn = document.getElementById('captureBtn');
+        const toggleCameraBtn = document.getElementById('toggleCameraBtn');
+        const uploadInput = document.getElementById('uploadInput');
+        const clearUploadBtn = document.getElementById('clearUploadBtn');
+        const cameraContainer = document.getElementById('cameraContainer');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const emptyState = document.getElementById('emptyState');
+        const resultsContainer = document.getElementById('resultsContainer');
+        
+        let currentStream = null;
+        let facingMode = "environment"; // default to back camera
+        let uploadedImageData = null;
+
+        // Initialize Icons
+        lucide.createIcons();
+
+        // --- Settings / Local Storage Logic ---
+        function openSettings() {
+            const savedKey = localStorage.getItem('biolens_api_key') || "";
+            document.getElementById('apiKeyInput').value = savedKey;
+            const modal = document.getElementById('settingsModal');
+            const content = document.getElementById('settingsModalContent');
+            modal.classList.remove('hidden');
+            void modal.offsetWidth; // trigger reflow
+            modal.classList.remove('opacity-0');
+            content.classList.remove('scale-95');
+        }
+
+        function closeSettings() {
+            const modal = document.getElementById('settingsModal');
+            const content = document.getElementById('settingsModalContent');
+            modal.classList.add('opacity-0');
+            content.classList.add('scale-95');
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        }
+
+        function saveSettings() {
+            const key = document.getElementById('apiKeyInput').value.trim();
+            localStorage.setItem('biolens_api_key', key);
+            closeSettings();
+            showMessage("Settings Saved", "Your API Key has been securely stored on this device.");
+        }
+
+        // --- Camera Setup ---
+        async function startCamera() {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+            try {
+                const constraints = {
+                    video: { facingMode: facingMode, width: { ideal: 1280 }, height: { ideal: 720 } }
+                };
+                currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = currentStream;
+                video.classList.remove('hidden');
+                uploadPreview.classList.add('hidden');
+                uploadedImageData = null;
+                clearUploadBtn.classList.add('hidden');
+                document.getElementById('statusText').textContent = "Live Camera";
+            } catch (err) {
+                console.error("Camera error:", err);
+                // Non-intrusive warning, user might just want to upload
+                document.getElementById('statusText').textContent = "Camera Unavailable";
+            }
+        }
+
+        toggleCameraBtn.addEventListener('click', () => {
+            facingMode = facingMode === "user" ? "environment" : "user";
+            startCamera();
+        });
+
+        // --- Upload Handling ---
+        uploadInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    uploadedImageData = event.target.result;
+                    uploadPreview.src = uploadedImageData;
+                    uploadPreview.classList.remove('hidden');
+                    video.classList.add('hidden');
+                    clearUploadBtn.classList.remove('hidden');
+                    document.getElementById('statusText').textContent = "Uploaded Image";
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        clearUploadBtn.addEventListener('click', () => {
+            uploadInput.value = '';
+            uploadedImageData = null;
+            uploadPreview.classList.add('hidden');
+            video.classList.remove('hidden');
+            clearUploadBtn.classList.add('hidden');
+            document.getElementById('statusText').textContent = "Live Camera";
+            startCamera();
+        });
+
+        // --- Core Application Logic (Capture & Analyze) ---
+        captureBtn.addEventListener('click', captureAndAnalyze);
+
+        async function captureAndAnalyze() {
+            let base64Data = "";
+
+            if (uploadedImageData) {
+                base64Data = uploadedImageData.split(',')[1];
+            } else {
+                if (!video.srcObject) {
+                    showMessage("Error", "Camera is not ready. Please allow camera access or upload an image.");
+                    return;
+                }
+                const ctx = captureCanvas.getContext('2d');
+                captureCanvas.width = video.videoWidth;
+                captureCanvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+                base64Data = captureCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+            }
+
+            if (!base64Data) {
+                showMessage("Error", "Failed to capture image data.");
+                return;
+            }
+
+            cameraContainer.classList.add('scanning');
+            loadingOverlay.classList.remove('hidden');
+            emptyState.classList.add('hidden');
+            resultsContainer.classList.add('hidden');
+
+            try {
+                await processImageWithGemini(base64Data);
+            } catch (error) {
+                console.error(error);
+                loadingOverlay.classList.add('hidden');
+                emptyState.classList.remove('hidden');
+                showMessage("Analysis Error", error.message);
+            } finally {
+                cameraContainer.classList.remove('scanning');
+            }
+        }
+
+        async function processImageWithGemini(base64Image) {
+            // Priority 1: Local Storage Key (if set by user for downloaded version)
+            // Priority 2: Injected Canvas Key (empty string in code, intercepted by proxy)
+            const savedKey = localStorage.getItem('biolens_api_key');
+            const activeKey = savedKey || apiKey;
+
+            const API_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${activeKey}`;
+
+            const prompt = `You are an expert biologist and botanist AI. Analyze this image and identify the primary plant, animal, insect, or fungus shown. 
+            Provide the response strictly as a JSON object with the following structure:
+            {
+                "commonName": "string",
+                "scientificName": "string",
+                "confidencePercentage": "number (e.g., 95)",
+                "traits": "string (1-2 sentences describing visual/anatomical traits)",
+                "facts": "string (1-2 sentences of fun facts or ecosystem role)",
+                "taxonomy": {
+                    "kingdom": "string",
+                    "phylum": "string",
+                    "class": "string",
+                    "family": "string"
+                }
+            }`;
+
+            const payload = {
+                contents: [{
+                    role: "user",
+                    parts: [
+                        { text: prompt },
+                        { inlineData: { mimeType: "image/jpeg", data: base64Image } }
+                    ]
+                }],
+                generationConfig: { responseMimeType: "application/json" }
+            };
+
+            try {
+                const response = await fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    if (response.status === 403 && !savedKey) {
+                        throw new Error("Missing API Key! Please click the Settings icon (sliders) in the top right to save your API Key before scanning.");
+                    }
+                    const errData = await response.json().catch(()=>({}));
+                    throw new Error(`API Error (${response.status}): ${errData.error?.message || response.statusText}`);
+                }
+
+                const data = await response.json();
+                const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                
+                if (!textResponse) throw new Error("No valid response received from AI.");
+
+                const resultObj = JSON.parse(textResponse);
+                displayResults(resultObj);
+            } catch (err) {
+                // If network fails entirely, bubble up
+                throw err;
+            }
+        }
+
+        function displayResults(data) {
+            document.getElementById('speciesName').textContent = data.commonName || "Unknown Species";
+            document.getElementById('scientificName').textContent = data.scientificName || "Unknown";
+            document.getElementById('confidenceBadge').textContent = `${data.confidencePercentage || 90}% Confidence`;
+            
+            document.getElementById('traitsText').textContent = data.traits || "No trait data available.";
+            document.getElementById('factsText').textContent = data.facts || "No ecosystem data available.";
+            
+            document.getElementById('taxKingdom').textContent = data.taxonomy?.kingdom || "Unknown";
+            document.getElementById('taxPhylum').textContent = data.taxonomy?.phylum || "Unknown";
+            document.getElementById('taxClass').textContent = data.taxonomy?.class || "Unknown";
+            document.getElementById('taxFamily').textContent = data.taxonomy?.family || "Unknown";
+
+            loadingOverlay.classList.add('hidden');
+            resultsContainer.classList.remove('hidden');
+        }
+
+        // Text-to-Speech
+        document.getElementById('speakBtn').addEventListener('click', () => {
+            const name = document.getElementById('speciesName').textContent;
+            const traits = document.getElementById('traitsText').textContent;
+            const textToSpeak = `${name}. ${traits}`;
+            
+            const utterance = new SpeechSynthesisUtterance(textToSpeak);
+            utterance.rate = 0.9;
+            speechSynthesis.speak(utterance);
+        });
+
+        // Custom Modal UI logic
+        function showMessage(title, body) {
+            document.getElementById('messageTitle').textContent = title;
+            document.getElementById('messageBody').textContent = body;
+            const modal = document.getElementById('messageModal');
+            const content = document.getElementById('messageModalContent');
+            modal.classList.remove('hidden');
+            void modal.offsetWidth; // trigger reflow
+            modal.classList.remove('opacity-0');
+            content.classList.remove('scale-95');
+        }
+
+        function closeMessage() {
+            const modal = document.getElementById('messageModal');
+            const content = document.getElementById('messageModalContent');
+            modal.classList.add('opacity-0');
+            content.classList.add('scale-95');
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        }
+
+        // Initialize App
+        window.onload = () => {
+            startCamera();
+        };
+
+    </script>
+</body>
+</html>
+
+
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    </style>
+</head>
+<body class="h-screen w-full flex flex-col overflow-hidden">
+
+    <!-- Header -->
+    <header class="glass-panel px-6 py-4 flex justify-between items-center z-20">
+        <div class="flex items-center gap-3">
+            <div class="bg-emerald-500/20 p-2 rounded-lg">
+                <i data-lucide="leaf" class="text-emerald-400 w-6 h-6"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-cyan-400">BioLens Explorer</h1>
+                <p class="text-xs text-slate-400 font-medium tracking-wide">REAL-TIME SPECIES IDENTIFICATION</p>
+            </div>
+        </div>
+        <div class="flex gap-3">
             <button class="bg-slate-800 hover:bg-slate-700 p-2.5 rounded-full transition" onclick="toggleJournal()">
                 <i data-lucide="book-open" class="text-slate-300 w-5 h-5"></i>
             </button>
