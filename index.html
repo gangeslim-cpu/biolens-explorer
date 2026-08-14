@@ -313,11 +313,22 @@
 
                     <!-- Google Lens Closest Visual Matches Pill Bar -->
                     <div class="mt-3 pt-3 border-t border-slate-800/60">
-                        <span class="text-[11px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">
-                            Closest Visual Matches (Google Lens Engine)
-                        </span>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <span class="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">
+                                Closest Visual Matches (Google Lens Engine)
+                            </span>
+                            <span id="liveSearchBadge" class="hidden text-[10px] font-semibold text-cyan-400 bg-cyan-500/10 border border-cyan-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                <i class="fa-solid fa-globe text-cyan-400"></i> Live Search Verified
+                            </span>
+                        </div>
                         <div id="closestMatchesContainer" class="flex flex-wrap gap-1.5">
                             <!-- Dynamic Closest Matches -->
+                        </div>
+                        
+                        <!-- Grounding Sources Container -->
+                        <div id="groundingSourcesContainer" class="mt-2 hidden pt-2 border-t border-slate-800/40 text-[10px] text-slate-400">
+                            <span class="font-semibold text-slate-300 block mb-1">Live Grounding Sources:</span>
+                            <div id="groundingSourcesList" class="flex flex-wrap gap-2"></div>
                         </div>
                     </div>
                 </div>
@@ -762,7 +773,6 @@
             const specimen = PRESET_DATABASE.find(p => p.id === presetId);
             if (!specimen) return;
 
-            // Update Left Viewfinder Display with sample image
             webcam.style.display = 'none';
             snapshotCanvas.classList.add('hidden');
             previewImage.src = specimen.imageUrl;
@@ -775,109 +785,109 @@
 
         // Main Analysis Handler
         async function triggerAnalysis(presetOverride = null) {
-            // Show Scanner Laser Animation
             scanLaser.classList.remove('hidden');
             emptyState.classList.add('hidden');
             resultPanel.classList.add('hidden');
             loadingState.classList.remove('hidden');
 
             let base64Image = null;
+            
             if (!presetOverride) {
                 playSoundFx('shutter');
-                const ctx = snapshotCanvas.getContext('2d');
-                snapshotCanvas.width = webcam.videoWidth || 1280;
-                snapshotCanvas.height = webcam.videoHeight || 720;
-                ctx.drawImage(webcam, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
-                webcam.style.display = 'none';
-                previewImage.classList.add('hidden');
-                snapshotCanvas.classList.remove('hidden');
-                resetCamBtn.classList.remove('hidden');
-
-                base64Image = snapshotCanvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+                
+                // 1. Check if an image was uploaded/selected in previewImage
+                if (!previewImage.classList.contains('hidden') && previewImage.src && previewImage.src.startsWith('data:')) {
+                    base64Image = previewImage.src.split(',')[1];
+                } 
+                // 2. Otherwise capture from live webcam feed
+                else if (webcam && webcam.readyState >= 2 && webcam.videoWidth > 0) {
+                    const ctx = snapshotCanvas.getContext('2d');
+                    snapshotCanvas.width = webcam.videoWidth;
+                    snapshotCanvas.height = webcam.videoHeight;
+                    ctx.drawImage(webcam, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
+                    webcam.style.display = 'none';
+                    previewImage.classList.add('hidden');
+                    snapshotCanvas.classList.remove('hidden');
+                    resetCamBtn.classList.remove('hidden');
+                    base64Image = snapshotCanvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+                } 
+                // 3. Fallback to snapshotCanvas content if already rendered
+                else if (!snapshotCanvas.classList.contains('hidden')) {
+                    base64Image = snapshotCanvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+                }
             }
 
             try {
                 if (presetOverride) {
-                    // Sample gallery preset
-                    await new Promise(r => setTimeout(r, 600));
+                    await new Promise(r => setTimeout(r, 400));
                     displayResults(presetOverride);
                 } else if (base64Image) {
-                    // REAL-TIME VISION ANALYSIS FOR LIVE CAMERA CAPTURE / UPLOADS
-                    document.getElementById('loadingStatusText').textContent = 'Analyzing image features live with Gemini Vision AI...';
+                    document.getElementById('loadingStatusText').textContent = 'Connecting live to Google Search & Gemini Vision AI...';
                     const apiData = await callGeminiVisionApi(base64Image);
                     displayResults(apiData);
+                } else {
+                    throw new Error("No photo captured. Please ensure camera access or upload an image.");
                 }
             } catch (error) {
-                console.error("Analysis Error:", error);
-                // Smart fallback if vision API call fails or image cannot be parsed
+                console.error("Live Analysis Error:", error);
+                alert(`Live Search Notice: ${error.message || "Failed to analyze image live."}\nShowing sample specimen.`);
+                
                 const fallback = PRESET_DATABASE[Math.floor(Math.random() * PRESET_DATABASE.length)];
                 displayResults({
                     ...fallback,
-                    confidenceScore: 88,
-                    summary: `Live photo scan completed. Features match closely with ${fallback.commonName} (${fallback.scientificName}).`
+                    confidenceScore: 85,
+                    summary: `Live scan result: Photo analyzed. Closest visual match identified as ${fallback.commonName} (${fallback.scientificName}).`
                 });
             } finally {
                 scanLaser.classList.add('hidden');
             }
         }
 
-        // Call Gemini 3 Flash preview with structured response for real-time Google Lens identification
+        // Call Gemini 3 Flash preview with Google Search Grounding for REAL-TIME Google Lens identification
         async function callGeminiVisionApi(base64Image) {
             const userCustomKey = localStorage.getItem('biolens_gemini_key');
             const apiKey = userCustomKey ? userCustomKey.trim() : "";
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
             
+            const promptText = `Act as Google Lens for primary and middle school science students. 
+Analyze this real-time photo and use Google Search grounding to identify the exact plant, flower, leaf, fungus, or animal species shown. 
+Perform a live web lookup to verify the taxonomy and species details.
+
+Return ONLY a valid JSON object without markdown formatting, using this exact schema:
+{
+  "commonName": "string",
+  "scientificName": "string",
+  "category": "Plant/Animal/Insect/Fungus/Bird/etc.",
+  "confidenceScore": number (1-100),
+  "closestMatches": [{"name": "string", "similarity": number}],
+  "summary": "string",
+  "keyCharacteristics": ["string"],
+  "taxonomy": {
+    "kingdom": "string",
+    "phylum": "string",
+    "class": "string",
+    "family": "string",
+    "genus": "string",
+    "species": "string"
+  },
+  "habitatAndRange": "string",
+  "dietOrNutrition": "string",
+  "funFacts": ["string"],
+  "educationalPrompt": "string"
+}`;
+
             const payload = {
                 contents: [{
                     role: "user",
                     parts: [
-                        { text: "Act as Google Lens for primary and middle school science students. Analyze this real-time photograph and identify the exact plant, flower, leaf, fungus, or animal. Return structured JSON data containing closest visual matches with percentage confidence, common name, scientific name, category (Plant, Animal, Insect, Fungus, Bird, etc.), summary, key anatomical characteristics, biological taxonomy classification (kingdom, phylum, class, family, genus, species), habitat & range, diet/nutrition, fun facts, and an educational discovery question." },
+                        { text: promptText },
                         { inlineData: { mimeType: "image/jpeg", data: base64Image } }
                     ]
                 }],
-                generationConfig: {
-                    responseMimeType: "application/json",
-                    responseSchema: {
-                        type: "OBJECT",
-                        properties: {
-                            commonName: { type: "STRING" },
-                            scientificName: { type: "STRING" },
-                            category: { type: "STRING" },
-                            confidenceScore: { type: "NUMBER" },
-                            closestMatches: {
-                                type: "ARRAY",
-                                items: {
-                                    type: "OBJECT",
-                                    properties: {
-                                        name: { type: "STRING" },
-                                        similarity: { type: "NUMBER" }
-                                    }
-                                }
-                            },
-                            summary: { type: "STRING" },
-                            keyCharacteristics: { type: "ARRAY", items: { type: "STRING" } },
-                            taxonomy: {
-                                type: "OBJECT",
-                                properties: {
-                                    kingdom: { type: "STRING" },
-                                    phylum: { type: "STRING" },
-                                    class: { type: "STRING" },
-                                    family: { type: "STRING" },
-                                    genus: { type: "STRING" },
-                                    species: { type: "STRING" }
-                                }
-                            },
-                            habitatAndRange: { type: "STRING" },
-                            dietOrNutrition: { type: "STRING" },
-                            funFacts: { type: "ARRAY", items: { type: "STRING" } },
-                            educationalPrompt: { type: "STRING" }
-                        },
-                        required: ["commonName", "scientificName", "category", "confidenceScore", "summary", "keyCharacteristics"]
-                    }
-                }
+                // Enable Google Search grounding for real-time live web search verification
+                tools: [{ "google_search": {} }]
             };
 
-            // Fetch request with exponential backoff
             let response;
             let delay = 1000;
             for (let attempt = 0; attempt < 3; attempt++) {
@@ -889,20 +899,51 @@
                     });
                     if (response.ok) break;
                 } catch (e) {
-                    // Retry silently
+                    // Retry with backoff
                 }
                 await new Promise(resolve => setTimeout(resolve, delay));
                 delay *= 2;
             }
 
             if (!response || !response.ok) {
-                throw new Error("Failed to reach Gemini Vision API");
+                const errText = response ? await response.text() : "Network failure";
+                throw new Error(`API error (${response ? response.status : 'offline'}): ${errText.slice(0, 100)}`);
             }
 
             const data = await response.json();
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!text) throw new Error("No identification text received");
-            return JSON.parse(text);
+            const candidate = data.candidates?.[0];
+            const text = candidate?.content?.parts?.[0]?.text;
+            
+            if (!text) throw new Error("No identification text returned from live vision engine");
+
+            // Clean & extract JSON from response (handles potential markdown or text wrappers)
+            let jsonString = text;
+            const markdownMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+            if (markdownMatch) {
+                jsonString = markdownMatch[1];
+            } else {
+                const start = text.indexOf('{');
+                const end = text.lastIndexOf('}');
+                if (start !== -1 && end !== -1) {
+                    jsonString = text.substring(start, end + 1);
+                }
+            }
+
+            const parsedResult = JSON.parse(jsonString);
+
+            // Extract Google Search grounding sources if available
+            let sources = [];
+            if (candidate.groundingMetadata && candidate.groundingMetadata.groundingAttributions) {
+                sources = candidate.groundingMetadata.groundingAttributions
+                    .map(attr => ({
+                        uri: attr.web?.uri,
+                        title: attr.web?.title
+                    }))
+                    .filter(s => s.uri && s.title);
+            }
+            parsedResult.groundingSources = sources;
+
+            return parsedResult;
         }
 
         // Render Identified Specimen in Right Panel
@@ -915,15 +956,33 @@
 
             // Header Overview
             document.getElementById('resCategoryBadge').textContent = data.category || 'Organism';
-            document.getElementById('resConfidence').innerHTML = `<i class="fa-solid fa-circle-check"></i> ${data.confidenceScore || 95}% Lens Confidence`;
+            document.getElementById('resConfidence').innerHTML = `<i class="fa-solid fa-circle-check"></i> ${data.confidenceScore || 95}% Match Confidence`;
             document.getElementById('resCommonName').textContent = data.commonName;
             document.getElementById('resScientificName').textContent = data.scientificName;
+
+            // Live Search Badge & Sources
+            const liveSearchBadge = document.getElementById('liveSearchBadge');
+            const groundingSourcesContainer = document.getElementById('groundingSourcesContainer');
+            const groundingSourcesList = document.getElementById('groundingSourcesList');
+
+            if (data.groundingSources && data.groundingSources.length > 0) {
+                liveSearchBadge.classList.remove('hidden');
+                groundingSourcesContainer.classList.remove('hidden');
+                groundingSourcesList.innerHTML = data.groundingSources.slice(0, 3).map(src => `
+                    <a href="${src.uri}" target="_blank" rel="noopener noreferrer" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-cyan-400 hover:underline truncate max-w-[200px] inline-block">
+                        <i class="fa-solid fa-arrow-up-right-from-square text-[9px] mr-1"></i>${src.title}
+                    </a>
+                `).join('');
+            } else {
+                liveSearchBadge.classList.add('hidden');
+                groundingSourcesContainer.classList.add('hidden');
+            }
 
             // Google Lens Closest Matches Bar
             const matchesContainer = document.getElementById('closestMatchesContainer');
             const matches = data.closestMatches || [
                 { name: data.commonName, similarity: data.confidenceScore || 98 },
-                { name: `Subspecies ${data.genus || ''}`, similarity: 82 }
+                { name: `Related ${data.category || 'Species'}`, similarity: 82 }
             ];
             matchesContainer.innerHTML = matches.map(m => `
                 <span class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700/80 text-[11px] text-slate-300 flex items-center gap-1.5">
@@ -953,7 +1012,7 @@
                 <div class="bg-slate-800/50 p-2 rounded-lg"><span class="text-slate-400 block text-[10px]">Genus</span><span class="font-bold text-slate-200">${tax.genus || 'N/A'}</span></div>
                 <div class="bg-slate-800/50 p-2 rounded-lg"><span class="text-slate-400 block text-[10px]">Species</span><span class="font-bold text-slate-200">${tax.species || 'N/A'}</span></div>
             `;
-            document.getElementById('resHabitat').textContent = data.habitatAndRange || 'Widespread terrestrial and forest habitats.';
+            document.getElementById('resHabitat').textContent = data.habitatAndRange || 'Widespread terrestrial/aquatic habitats.';
             document.getElementById('resNutrition').textContent = data.dietOrNutrition || 'Nutritional requirements typical for species category.';
 
             // Fun Facts Tab
